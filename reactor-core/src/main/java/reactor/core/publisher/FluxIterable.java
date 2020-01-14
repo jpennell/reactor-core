@@ -19,16 +19,20 @@ package reactor.core.publisher;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import org.reactivestreams.Subscriber;
+
 import reactor.core.CoreSubscriber;
 import reactor.core.Fuseable;
 import reactor.util.annotation.Nullable;
 import reactor.util.function.Tuple2;
 
 /**
- * Emits the contents of an Iterable source.
+ * Emits the contents of an Iterable source. Attempt to discard remainder of a source
+ * in case of error / cancellation, but uses the {@link Spliterator} API to try and detect
+ * infinite sources (so that said discarding doesn't loop infinitely).
  *
  * @param <T> the value type
  *
@@ -50,9 +54,11 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 
 	@Override
 	public void subscribe(CoreSubscriber<? super T> actual) {
+		boolean knownToBeFinite = false;
 		Iterator<? extends T> it;
 
 		try {
+			knownToBeFinite = iterable.spliterator().getExactSizeIfKnown() != -1;
 			it = iterable.iterator();
 		}
 		catch (Throwable e) {
@@ -60,7 +66,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 			return;
 		}
 
-		subscribe(actual, it, onClose);
+		subscribe(actual, it, knownToBeFinite, onClose);
 	}
 
 	@Override
@@ -73,28 +79,28 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 	}
 
 	/**
-	 * Common method to take an Iterator as a source of values.
+	 * Common method to take an {@link Iterator} as a source of values.
 	 *
 	 * @param s the subscriber to feed this iterator to
-	 * @param it the iterator to use as a source of values
+	 * @param it the {@link Iterator} to use as a predictable source of values
 	 */
 	@SuppressWarnings("unchecked")
-	static <T> void subscribe(CoreSubscriber<? super T> s, Iterator<? extends T> it) {
-		subscribe(s, it, null);
+	static <T> void subscribe(CoreSubscriber<? super T> s, Iterator<? extends T> it, boolean knownToBeFinite) {
+		subscribe(s, it, knownToBeFinite, null);
 	}
 
 	/**
-	 * Common method to take an Iterator as a source of values.
+	 * Common method to take an {@link Iterator} as a source of values.
 	 *
 	 * @param s the subscriber to feed this iterator to
-	 * @param it the iterator to use as a source of values
+	 * @param it the {@link Iterator} to use as a source of values
 	 * @param onClose close handler to call once we're done with the iterator (provided it
 	 * is not null, this includes when the iteration errors or complete or the subscriber
 	 * is cancelled). Null to ignore.
 	 */
 	@SuppressWarnings("unchecked")
 	static <T> void subscribe(CoreSubscriber<? super T> s, Iterator<? extends T> it,
-			@Nullable Runnable onClose) {
+			boolean knownToBeFinite, @Nullable Runnable onClose) {
 		//noinspection ConstantConditions
 		if (it == null) {
 			Operators.error(s, new NullPointerException("The iterator is null"));
@@ -133,10 +139,10 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 
 		if (s instanceof ConditionalSubscriber) {
 			s.onSubscribe(new IterableSubscriptionConditional<>((ConditionalSubscriber<? super T>) s,
-					it, onClose));
+					it, knownToBeFinite, onClose));
 		}
 		else {
-			s.onSubscribe(new IterableSubscription<>(s, it, onClose));
+			s.onSubscribe(new IterableSubscription<>(s, it, knownToBeFinite, onClose));
 		}
 	}
 
@@ -146,6 +152,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		final CoreSubscriber<? super T> actual;
 
 		final Iterator<? extends T> iterator;
+		final boolean               knownToBeFinite;
 		final Runnable              onClose;
 
 		volatile boolean cancelled;
@@ -179,15 +186,16 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		T current;
 
 		IterableSubscription(CoreSubscriber<? super T> actual,
-				Iterator<? extends T> iterator, @Nullable Runnable onClose) {
+				Iterator<? extends T> iterator, boolean knownToBeFinite, @Nullable Runnable onClose) {
 			this.actual = actual;
 			this.iterator = iterator;
+			this.knownToBeFinite = knownToBeFinite;
 			this.onClose = onClose;
 		}
 
 		IterableSubscription(CoreSubscriber<? super T> actual,
-				Iterator<? extends T> iterator) {
-			this(actual, iterator, null);
+				Iterator<? extends T> iterator, boolean knownToBeFinite) {
+			this(actual, iterator, knownToBeFinite, null);
 		}
 
 		@Override
@@ -341,6 +349,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		public void cancel() {
 			onCloseWithDropError();
 			cancelled = true;
+			Operators.onDiscardMultiple(this.iterator, this.knownToBeFinite, actual.currentContext());
 		}
 
 		@Override
@@ -360,6 +369,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 
 		@Override
 		public void clear() {
+			Operators.onDiscardMultiple(this.iterator, this.knownToBeFinite, actual.currentContext());
 			state = STATE_NO_NEXT;
 		}
 
@@ -418,6 +428,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		final ConditionalSubscriber<? super T> actual;
 
 		final Iterator<? extends T> iterator;
+		final boolean               knownToBeFinite;
 		final Runnable              onClose;
 
 		volatile boolean cancelled;
@@ -451,15 +462,16 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		T current;
 
 		IterableSubscriptionConditional(ConditionalSubscriber<? super T> actual,
-				Iterator<? extends T> iterator, @Nullable Runnable onClose) {
+				Iterator<? extends T> iterator, boolean knownToBeFinite, @Nullable Runnable onClose) {
 			this.actual = actual;
 			this.iterator = iterator;
+			this.knownToBeFinite = knownToBeFinite;
 			this.onClose = onClose;
 		}
 
 		IterableSubscriptionConditional(ConditionalSubscriber<? super T> actual,
-				Iterator<? extends T> iterator) {
-			this(actual, iterator, null);
+				Iterator<? extends T> iterator, boolean knownToBeFinite) {
+			this(actual, iterator, knownToBeFinite, null);
 		}
 
 		@Override
@@ -615,6 +627,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		public void cancel() {
 			onCloseWithDropError();
 			cancelled = true;
+			Operators.onDiscardMultiple(this.iterator, this.knownToBeFinite, actual.currentContext());
 		}
 
 		@Override
@@ -634,6 +647,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 
 		@Override
 		public void clear() {
+			Operators.onDiscardMultiple(this.iterator, this.knownToBeFinite, actual.currentContext());
 			state = STATE_NO_NEXT;
 		}
 

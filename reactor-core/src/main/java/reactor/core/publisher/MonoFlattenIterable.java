@@ -19,6 +19,7 @@ package reactor.core.publisher;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Spliterator;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -82,11 +83,11 @@ final class MonoFlattenIterable<T, R> extends FluxFromMonoOperator<T, R>
 			}
 
 			Iterator<? extends R> it;
-
+			boolean itFinite;
 			try {
 				Iterable<? extends R> iter = mapper.apply(v);
-
 				it = iter.iterator();
+				itFinite = iter.spliterator().getExactSizeIfKnown() != -1;
 			}
 			catch (Throwable ex) {
 				Operators.error(actual, Operators.onOperatorError(ex,
@@ -94,7 +95,7 @@ final class MonoFlattenIterable<T, R> extends FluxFromMonoOperator<T, R>
 				return;
 			}
 
-			FluxIterable.subscribe(actual, it);
+			FluxIterable.subscribe(actual, it, itFinite);
 
 			return;
 		}
