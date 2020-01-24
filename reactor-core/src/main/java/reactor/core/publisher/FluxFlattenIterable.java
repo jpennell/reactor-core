@@ -19,7 +19,6 @@ package reactor.core.publisher;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Queue;
-import java.util.Spliterator;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -95,7 +94,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 			try {
 				Iterable<? extends R> iter = mapper.apply(v);
 				it = iter.iterator();
-				knownToBeFinite = iter.spliterator().getExactSizeIfKnown() != -1;
+				knownToBeFinite = iter.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
 			}
 			catch (Throwable ex) {
 				Context ctx = actual.currentContext();
@@ -286,6 +285,12 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 			}
 		}
 
+		//should be kept small and final to favor inlining
+		final void clearIterator() {
+			current = null;
+			currentKnownToBeFinite = false;
+		}
+
 		void drainAsync() {
 			final Subscriber<? super R> a = actual;
 			final Queue<T> q = queue;
@@ -307,8 +312,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					Throwable ex = error;
 					if (ex != null) {
 						ex = Exceptions.terminate(ERROR, this);
-						current = null;
-						currentKnownToBeFinite = false; //reset explicitly
+						clearIterator();
 						Operators.onDiscardQueueWithClear(q, ctx, null);
 						a.onError(ex);
 						return;
@@ -321,8 +325,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					try {
 						t = q.poll();
 					} catch (Throwable pollEx) {
-						current = null;
-						currentKnownToBeFinite = false; //reset explicitly
+						clearIterator();
 						Operators.onDiscardQueueWithClear(q, ctx, null);
 						a.onError(pollEx);
 						return;
@@ -343,7 +346,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = iterable.spliterator().getExactSizeIfKnown() != -1;
+							itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
 
 							b = it.hasNext();
 						}
@@ -377,8 +380,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 
 					while (e != r) {
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(q, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -388,8 +390,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						Throwable ex = error;
 						if (ex != null) {
 							ex = Exceptions.terminate(ERROR, this);
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(q, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -412,8 +413,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						a.onNext(v);
 
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(q, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -444,16 +444,14 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 							}
 							it = null;
 							itFinite = false;
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							break;
 						}
 					}
 
 					if (e == r) {
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(q, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -463,8 +461,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						Throwable ex = error;
 						if (ex != null) {
 							ex = Exceptions.terminate(ERROR, this);
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(q, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -476,8 +473,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						boolean empty = q.isEmpty() && it == null;
 
 						if (d && empty) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							a.onComplete();
 							return;
 						}
@@ -527,8 +523,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					try {
 						t = q.poll();
 					} catch (Throwable pollEx) {
-						current = null;
-						currentKnownToBeFinite = false; //reset explicitly
+						clearIterator();
 						Operators.onDiscardQueueWithClear(q, ctx, null);
 						a.onError(pollEx);
 						return;
@@ -549,13 +544,12 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = iterable.spliterator().getExactSizeIfKnown() != -1;
+							itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
 
 							b = it.hasNext();
 						}
 						catch (Throwable exc) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							a.onError(Operators.onOperatorError(s, exc, t,
 									ctx));
 							//note: if there is an exception, we can consider the iterator done,
@@ -578,8 +572,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 
 					while (e != r) {
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(queue, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -592,8 +585,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 							v = Objects.requireNonNull(it.next(), "iterator returned null");
 						}
 						catch (Throwable exc) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							a.onError(Operators.onOperatorError(s, exc,
 									ctx));
 							return;
@@ -602,8 +594,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						a.onNext(v);
 
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(queue, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -618,8 +609,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 							b = it.hasNext();
 						}
 						catch (Throwable exc) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							a.onError(Operators.onOperatorError(s, exc,
 									ctx));
 							return;
@@ -628,16 +618,14 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						if (!b) {
 							it = null;
 							itFinite = false;
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							break;
 						}
 					}
 
 					if (e == r) {
 						if (cancelled) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							final Context context = actual.currentContext();
 							Operators.onDiscardQueueWithClear(queue, context, null);
 							Operators.onDiscardMultiple(it, itFinite, context);
@@ -648,8 +636,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						boolean empty = queue.isEmpty() && it == null;
 
 						if (d && empty) {
-							current = null;
-							currentKnownToBeFinite = false; //reset explicitly
+							clearIterator();
 							a.onComplete();
 							return;
 						}
@@ -692,8 +679,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 		public void clear() {
 			final Context context = actual.currentContext();
 			Operators.onDiscardMultiple(current, currentKnownToBeFinite, context);
-			current = null;
-			currentKnownToBeFinite = false;
+			clearIterator();
 			Operators.onDiscardQueueWithClear(queue, context, null);
 		}
 
@@ -723,7 +709,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					try {
 						iterable = mapper.apply(v);
 						it = iterable.iterator();
-						itFinite = iterable.spliterator().getExactSizeIfKnown() != -1;
+						itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
 					}
 					catch (Throwable error) {
 						Operators.onDiscard(v, ctx);
@@ -745,8 +731,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 				R r = Objects.requireNonNull(it.next(), "iterator returned null");
 
 				if (!it.hasNext()) {
-					current = null;
-					currentKnownToBeFinite = false; //reset explicitly
+					clearIterator();
 				}
 
 				return r;

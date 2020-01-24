@@ -40,6 +40,12 @@ import reactor.util.function.Tuple2;
  */
 final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<T> {
 
+	/**
+	 * Constant representing the fact that {@link Spliterator#getExactSizeIfKnown()} cannot
+	 * guarantee the size.
+	 */
+	static final long SPLITERATOR_UNSIZED = -1L;
+
 	final Iterable<? extends T> iterable;
 	private final Runnable      onClose;
 
@@ -58,7 +64,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		Iterator<? extends T> it;
 
 		try {
-			knownToBeFinite = iterable.spliterator().getExactSizeIfKnown() != -1;
+			knownToBeFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
 			it = iterable.iterator();
 		}
 		catch (Throwable e) {
