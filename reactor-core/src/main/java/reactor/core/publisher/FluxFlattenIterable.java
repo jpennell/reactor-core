@@ -19,6 +19,7 @@ package reactor.core.publisher;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Spliterator;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -94,7 +95,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 			try {
 				Iterable<? extends R> iter = mapper.apply(v);
 				it = iter.iterator();
-				knownToBeFinite = iter.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
+				knownToBeFinite = (iter.spliterator().characteristics() & Spliterator.SIZED) == 0;
 			}
 			catch (Throwable ex) {
 				Context ctx = actual.currentContext();
@@ -346,7 +347,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
+							itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
 
 							b = it.hasNext();
 						}
@@ -544,7 +545,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
+							itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
 
 							b = it.hasNext();
 						}
@@ -709,7 +710,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					try {
 						iterable = mapper.apply(v);
 						it = iterable.iterator();
-						itFinite = iterable.spliterator().getExactSizeIfKnown() != FluxIterable.SPLITERATOR_UNSIZED;
+						itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
 					}
 					catch (Throwable error) {
 						Operators.onDiscard(v, ctx);
