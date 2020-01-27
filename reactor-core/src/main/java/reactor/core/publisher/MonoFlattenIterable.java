@@ -87,7 +87,7 @@ final class MonoFlattenIterable<T, R> extends FluxFromMonoOperator<T, R>
 			try {
 				Iterable<? extends R> iter = mapper.apply(v);
 				it = iter.iterator();
-				itFinite = (iter.spliterator().characteristics() & Spliterator.SIZED) == 0;
+				itFinite = iter.spliterator().hasCharacteristics(Spliterator.SIZED);
 			}
 			catch (Throwable ex) {
 				Operators.error(actual, Operators.onOperatorError(ex,

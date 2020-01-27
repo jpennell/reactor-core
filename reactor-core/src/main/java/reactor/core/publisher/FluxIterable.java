@@ -58,7 +58,7 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 		Iterator<? extends T> it;
 
 		try {
-			knownToBeFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
+			knownToBeFinite = iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
 			it = iterable.iterator();
 		}
 		catch (Throwable e) {

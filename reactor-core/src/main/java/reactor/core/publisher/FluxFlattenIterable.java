@@ -95,7 +95,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 			try {
 				Iterable<? extends R> iter = mapper.apply(v);
 				it = iter.iterator();
-				knownToBeFinite = (iter.spliterator().characteristics() & Spliterator.SIZED) == 0;
+				knownToBeFinite = iter.spliterator().hasCharacteristics(Spliterator.SIZED);
 			}
 			catch (Throwable ex) {
 				Context ctx = actual.currentContext();
@@ -347,7 +347,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
+							itFinite = iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
 
 							b = it.hasNext();
 						}
@@ -545,7 +545,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 						try {
 							iterable = mapper.apply(t);
 							it = iterable.iterator();
-							itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
+							itFinite = iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
 
 							b = it.hasNext();
 						}
@@ -710,7 +710,7 @@ final class FluxFlattenIterable<T, R> extends FluxOperator<T, R> implements Fuse
 					try {
 						iterable = mapper.apply(v);
 						it = iterable.iterator();
-						itFinite = (iterable.spliterator().characteristics() & Spliterator.SIZED) == 0;
+						itFinite = iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
 					}
 					catch (Throwable error) {
 						Operators.onDiscard(v, ctx);
