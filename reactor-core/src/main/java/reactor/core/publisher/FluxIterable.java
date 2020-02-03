@@ -40,10 +40,27 @@ import reactor.util.function.Tuple2;
  */
 final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<T> {
 
+	/**
+	 * Utility method to check that a given {@link Iterable} can be positively identified as
+	 * finite, which implies forEachRemaining type of iteration can be done to discard unemitted
+	 * values (in case of cancellation or error).
+	 * <p>
+	 * A {@link Collection} is assumed to be finite, and for other iterables the {@link Spliterator}
+	 * {@link Spliterator#SIZED} characteristic is looked for.
+	 *
+	 * @param iterable the {@link Iterable} to check.
+	 * @param <T>
+	 * @return true if the {@link Iterable} can confidently classified as finite, false if not finite/unsure
+	 */
+	static <T> boolean checkFinite(Iterable<T> iterable) {
+		return iterable instanceof Collection || iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
+	}
+
 	final Iterable<? extends T> iterable;
+	@Nullable
 	private final Runnable      onClose;
 
-	FluxIterable(Iterable<? extends T> iterable, Runnable onClose) {
+	FluxIterable(Iterable<? extends T> iterable, @Nullable Runnable onClose) {
 		this.iterable = Objects.requireNonNull(iterable, "iterable");
 		this.onClose = onClose;
 	}
@@ -54,11 +71,11 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 
 	@Override
 	public void subscribe(CoreSubscriber<? super T> actual) {
-		boolean knownToBeFinite = false;
+		boolean knownToBeFinite;
 		Iterator<? extends T> it;
 
 		try {
-			knownToBeFinite = iterable.spliterator().hasCharacteristics(Spliterator.SIZED);
+			knownToBeFinite = FluxIterable.checkFinite(iterable);
 			it = iterable.iterator();
 		}
 		catch (Throwable e) {
@@ -84,7 +101,6 @@ final class FluxIterable<T> extends Flux<T> implements Fuseable, SourceProducer<
 	 * @param s the subscriber to feed this iterator to
 	 * @param it the {@link Iterator} to use as a predictable source of values
 	 */
-	@SuppressWarnings("unchecked")
 	static <T> void subscribe(CoreSubscriber<? super T> s, Iterator<? extends T> it, boolean knownToBeFinite) {
 		subscribe(s, it, knownToBeFinite, null);
 	}
