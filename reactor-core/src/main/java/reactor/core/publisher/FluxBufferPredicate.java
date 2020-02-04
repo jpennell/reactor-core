@@ -152,7 +152,7 @@ final class FluxBufferPredicate<T, C extends Collection<? super T>>
 					// fastpath will avoid unnecessary request(1) during filling
 					fastpath = true;
 					requestedBuffers = Long.MAX_VALUE;
-					requestedBuffers = Long.MAX_VALUE;
+					requestedFromSource = Long.MAX_VALUE;
 					s.request(Long.MAX_VALUE);
 				}
 				else {
