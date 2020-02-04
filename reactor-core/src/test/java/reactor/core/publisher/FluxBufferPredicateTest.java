@@ -822,16 +822,6 @@ public class FluxBufferPredicateTest {
 				.verifyComplete();
 	}
 
-	//see https://github.com/reactor/reactor-core/issues/1937
-	@Test
-	public void smokeTestGh1937() {
-		Hooks.onOperatorDebug();
-		Flux.range(0, 1000)
-		    .bufferUntil(v -> true)
-		    .flatMap(v -> Mono.delay(Duration.ofMillis(10)))
-		    .blockLast();
-	}
-//
 	//see https://github.com/reactor/reactor-core/pull/2027
 	@Test
 	public void testBufferUntilNoExtraRequestFromConcurrentEmitAndRequest() {
