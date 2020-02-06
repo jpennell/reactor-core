@@ -229,13 +229,15 @@ final class FluxBufferPredicate<T, C extends Collection<? super T>>
 				b.add(t);
 			}
 
+			if (fastpath) {
+				return true;
+			}
+
 			boolean isNotExpectingFromSource = REQUESTED_FROM_SOURCE.decrementAndGet(this) == 0;
 			boolean isStillExpectingBuffer = REQUESTED_BUFFERS.get(this) > 0;
-
-			if (!fastpath && isNotExpectingFromSource && isStillExpectingBuffer) {
-				if (REQUESTED_FROM_SOURCE.compareAndSet(this, 0, 1)) {
-					return false; //explicitly mark as "needing more", either in attached conditional or onNext()
-				}
+			if (isNotExpectingFromSource && isStillExpectingBuffer
+					&& REQUESTED_FROM_SOURCE.compareAndSet(this, 0, 1)) {
+				return false; //explicitly mark as "needing more", either in attached conditional or onNext()
 			}
 			return true;
 		}
